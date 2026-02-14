@@ -6,6 +6,11 @@ from typing import Dict, List
 from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
+import logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 # ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 #       CONFIGURATION & DATA
 # ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
