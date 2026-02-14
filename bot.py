@@ -16,7 +16,7 @@ logging.basicConfig(
 # ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 DATA_FILE = "taboo_database.json"
-WIN_IMAGE_URL = "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO/main/win.jpg"
+WIN_IMAGE_URL = "https://raw.githubusercontent.com/BhawaniTheKing/Taboo-Telegram-Bot/main/win.jpg"
 
 def load_data():
     if not os.path.exists(DATA_FILE):
