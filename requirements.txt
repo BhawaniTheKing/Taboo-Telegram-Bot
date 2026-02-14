@@ -1,0 +1,4 @@
+# Core Dependencies
+python-telegram-bot>=20.7
+python-telegram-bot[optional]>=20.7
+asyncio
