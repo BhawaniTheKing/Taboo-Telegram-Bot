@@ -30,9 +30,10 @@ def load_data():
         print("Load Error:", e)
         return {
             "lobbies": {},
-            "used_words": []
+            "used_words": [],
+            "profiles": {}
         }
-
+        
 def save_data(data):
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -41,6 +42,10 @@ def save_data(data):
         print("Save Error:", e)
 
 data = load_data()
+
+if "profiles" not in data:
+    data["profiles"] = {}
+    save_data(data)
 
 # ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 # HTML BOX DESIGN (Exact As You Said)
@@ -504,6 +509,7 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ),
                 parse_mode="HTML"
             )
+            asyncio.create_task(start_turn_timer(chat.id, context))
         except:
             pass
 
@@ -565,6 +571,14 @@ async def game_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         text = message.text.lower().strip()
+        # 🚫 Banned word detection
+    for banned_word in lobby.get("banned_words", []):
+        if banned_word.lower() in text:
+            await message.reply_html(
+                box("🚫 <b>BANNED WORD USED!</b>\nPoint Cancelled.")
+            )
+            return
+        
         current_word = lobby["current_word"].lower()
         current_team = lobby["current_turn"]
         explainer_id = lobby.get("current_explainer")
@@ -593,6 +607,14 @@ async def game_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             # 🎉 Win Check
             if lobby["scores"][current_team] >= 5:
                 winner_emoji = "🟠" if current_team == "BJP" else "🔵"
+
+                for uid in lobby["teams"][current_team]:
+                    if uid.startswith("dummy"):
+                        continue
+                        if uid not in data["profiles"]:
+                            data["profiles"][uid] = {"wins": 0, "total_score": 0}
+                            data["profiles"][uid]["wins"] += 1
+                            save_data(data)
 
                 await message.reply_photo(
                     photo=WIN_IMAGE_URL,
@@ -658,6 +680,7 @@ async def game_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     ),
                     parse_mode="HTML"
                 )
+                asyncio.create_task(start_turn_timer(chat.id, context))
             except:
                 pass
 
@@ -670,9 +693,51 @@ async def game_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     "New explainer received word in DM."
                 )
             )
+            if str(user.id) not in data["profiles"]:
+                data["profiles"][str(user.id)] = {"wins": 0, "total_score": 0}
+                data["profiles"][str(user.id)]["total_score"] += 1
+                save_data(data)
 
     except Exception as e:
         print("Game Engine Error:", e)
+
+    # ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+# BROADCAST COMMAND (OWNER ONLY)
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+OWNER_USERNAME = "jeffreygoonstein"
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    if user.username != OWNER_USERNAME:
+        return
+
+    if not context.args:
+        await update.message.reply_html(
+            box("⚠️ <b>Usage:</b>\n/broadcast Your message here")
+        )
+        return
+
+    message_text = " ".join(context.args)
+    message_text = message_text.replace("\\n", "\n")
+
+    sent = 0
+
+    for chat_id in data["lobbies"]:
+        try:
+            await context.bot.send_message(
+                chat_id=int(chat_id),
+                text=box(message_text),
+                parse_mode="HTML"
+            )
+            sent += 1
+        except:
+            continue
+
+    await update.message.reply_html(
+        box(f"✅ Broadcast sent to {sent} groups.")
+    )
 
 # ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 # SKIP COMMAND
@@ -768,6 +833,7 @@ async def skip_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ),
                 parse_mode="HTML"
             )
+            asyncio.create_task(start_turn_timer(chat.id, context))
         except:
             pass
 
@@ -777,6 +843,83 @@ async def skip_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print("Skip Error:", e)
+
+# ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+# TURN TIMER SYSTEM
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+async def start_turn_timer(chat_id, context):
+    await asyncio.sleep(60)
+
+    chat_id = str(chat_id)
+
+    if chat_id not in data["lobbies"]:
+        return
+
+    lobby = data["lobbies"][chat_id]
+
+    if not lobby["game_started"]:
+        return
+
+    # Auto skip
+    try:
+        await context.bot.send_message(
+            chat_id=int(chat_id),
+            text=box("⏰ <b>Time Up!</b>\nWord automatically skipped."),
+            parse_mode="HTML"
+        )
+    except:
+        pass
+
+    # Trigger skip internally
+    lobby["scores"][lobby["current_turn"]] -= 0  # no penalty
+    save_data(data)
+
+# ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+# PROFILE COMMAND
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    uid = str(user.id)
+
+    if uid not in data["profiles"]:
+        data["profiles"][uid] = {
+            "wins": 0,
+            "total_score": 0
+        }
+        save_data(data)
+
+    profile_data = data["profiles"][uid]
+
+    msg = (
+        f"👤 <b>{user.first_name}</b>\n\n"
+        f"🏆 Wins: {profile_data['wins']}\n"
+        f"⭐ Total Score: {profile_data['total_score']}"
+    )
+
+    await update.message.reply_html(box(msg))
+
+# ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+# TEAM COMMAND
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+async def team_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = str(update.effective_chat.id)
+
+    if chat_id not in data["lobbies"]:
+        return
+
+    lobby = data["lobbies"][chat_id]
+
+    msg = (
+        "🟠 <b>BJP Team:</b> "
+        f"{len(lobby['teams']['BJP'])} players\n\n"
+        "🔵 <b>CONGRESS Team:</b> "
+        f"{len(lobby['teams']['CONGRESS'])} players"
+    )
+
+    await update.message.reply_html(box(msg))
 
 # ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 # END GAME COMMAND
@@ -843,6 +986,9 @@ def main():
     app.add_handler(CommandHandler("startgame", start_game))
     app.add_handler(CommandHandler("skip", skip_word))
     app.add_handler(CommandHandler("endgame", end_game))
+    app.add_handler(CommandHandler("team", team_info))
+    app.add_handler(CommandHandler("profile", profile))
+    app.add_handler(CommandHandler("broadcast", broadcast))
 
     # Game Message Handler
     app.add_handler(MessageHandler(filters.ALL, game_message_handler))
